@@ -11,8 +11,13 @@ import (
 	"github.com/jbowtie/gokogiri"
 )
 
-func getUSCIS(ticket string) (string, error) {
-	body := fmt.Sprintf("hangeLocale=&appReceiptNum=%s&initCaseSearch=CHECK+STATUS", ticket)
+// Event the aws event that contains the request
+type Event struct {
+	Ticket string `json:"ticket"`
+}
+
+func getUSCIS(event Event) (string, error) {
+	body := fmt.Sprintf("hangeLocale=&appReceiptNum=%s&initCaseSearch=CHECK+STATUS", event.Ticket)
 	req, err := http.NewRequest("POST", "https://egov.uscis.gov/casestatus/mycasestatus.do", bytes.NewBuffer([]byte(body)))
 	if err != nil {
 		panic(err)
@@ -48,7 +53,15 @@ func main() {
 	if len(os.Getenv("LAMBDA")) > 0 {
 		lambda.Start(getUSCIS)
 	} else {
-		fmt.Println(getUSCIS(os.Args[1]))
+		if len(os.Args) > 1 {
+			response, err := getUSCIS(Event{os.Args[1]})
+			if err != nil {
+				panic(err)
+			}
+			fmt.Println(response)
+		} else {
+			fmt.Println("Argument needed to execute the script (case identifier).")
+		}
 	}
 
 }
