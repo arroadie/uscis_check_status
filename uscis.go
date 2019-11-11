@@ -17,10 +17,12 @@ type Event struct {
 }
 
 func getUSCIS(event Event) (string, error) {
+	var response string
+
 	body := fmt.Sprintf("hangeLocale=&appReceiptNum=%s&initCaseSearch=CHECK+STATUS", event.Ticket)
 	req, err := http.NewRequest("POST", "https://egov.uscis.gov/casestatus/mycasestatus.do", bytes.NewBuffer([]byte(body)))
 	if err != nil {
-		panic(err)
+		return response, err
 	}
 
 	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
@@ -28,24 +30,25 @@ func getUSCIS(event Event) (string, error) {
 	client := &http.Client{}
 	resp, err := client.Do(req)
 	if err != nil {
-		panic(err)
+		return response, err
 	}
 	defer resp.Body.Close()
 
 	page, err := ioutil.ReadAll(resp.Body)
 	if err != nil {
-		panic(err)
+		return response, err
 	}
 
 	doc, err := gokogiri.ParseHtml(page)
 	if err != nil {
-		panic(err)
+		return response, err
 	}
 
 	html := doc.Root().FirstChild()
 	defer doc.Free()
 	results, _ := html.Search("/html/body/div[2]/form/div/div[1]/div/div/div[2]/div[3]/p")
-	return fmt.Sprintln(results[0].Content()), nil
+	response = results[0].Content()
+	return response, nil
 }
 
 func main() {
