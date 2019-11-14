@@ -20,8 +20,9 @@ import (
 
 // Event the aws event that contains the request
 type Event struct {
-	Ticket  string `json:"ticket"`
-	Message string `json:"message"`
+	Ticket      string `json:"ticket"`
+	Message     string `json:"message"`
+	Destination string `json:"destination"`
 }
 
 func getUSCIS(event Event) (Event, error) {
@@ -89,9 +90,9 @@ func lambdaWrapper(event Event) (Event, error) {
 		if aerr, ok := err.(awserr.Error); ok {
 			switch aerr.Code() {
 			case dynamodb.ErrCodeResourceNotFoundException:
-				log.Println("record not found")
 				log.Println(dynamodb.ErrCodeResourceNotFoundException, aerr.Error())
 			default:
+				// TODO: Find why the validation exception falls here...
 				log.Println(aerr.Error())
 			}
 		} else {
@@ -105,18 +106,9 @@ func lambdaWrapper(event Event) (Event, error) {
 		panic(err)
 	}
 
-	if dbResponse.Item["message"] == nil || event.Message != dbResponse.Item["message"].GoString() {
-		av, err := dynamodbattribute.MarshalMap(event)
-		item := &dynamodb.PutItemInput{
-			Item:      av,
-			TableName: aws.String("tickets"),
-		}
+	saveToDynamo(event, svc)
 
-		_, err = svc.PutItem(item)
-		if err != nil {
-			log.Println("Error calling PutItem:")
-			log.Println(err.Error())
-		}
+	if dbResponse.Item["message"] == nil || event.Message != *dbResponse.Item["message"].S {
 
 		snsClient := sns.New(sess)
 		snsInput := &sns.PublishInput{
@@ -132,13 +124,27 @@ func lambdaWrapper(event Event) (Event, error) {
 	return event, nil
 }
 
+func saveToDynamo(event Event, svc *dynamodb.DynamoDB) {
+	av, err := dynamodbattribute.MarshalMap(event)
+	item := &dynamodb.PutItemInput{
+		Item:      av,
+		TableName: aws.String("tickets"),
+	}
+
+	_, err = svc.PutItem(item)
+	if err != nil {
+		log.Println("Error calling PutItem:")
+		log.Println(err.Error())
+	}
+}
+
 func main() {
 
 	if len(os.Getenv("LAMBDA")) > 0 {
 		lambda.Start(lambdaWrapper)
 	} else {
 		if len(os.Args) > 1 {
-			response, err := getUSCIS(Event{os.Args[1], ""})
+			response, err := getUSCIS(Event{os.Args[1], "", ""})
 			if err != nil {
 				panic(err)
 			}
